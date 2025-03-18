@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import logging
 from flask import Flask, request, jsonify
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -7,12 +8,19 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score
 import joblib
 
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+
 # Load dataset
-file_path = "dataSet/newPreprocessed.csv"
-mergedData = pd.read_csv(file_path)
+file_path = "newPreprocessed.csv"
+try:
+    mergedData = pd.read_csv(file_path)
+    logging.info("Dataset loaded successfully.")
+except FileNotFoundError:
+    logging.error(f"Error: The file {file_path} was not found.")
+    exit()
 
 # Encode categorical variable
 label_encoder = LabelEncoder()
@@ -55,26 +63,34 @@ joblib.dump(scaler, "scaler.pkl")
 # Flask API
 app = Flask(__name__)
 
+@app.route('/')
+def home():
+    return "Welcome to the Loan Approval Prediction API! Use the /predict endpoint with a POST request."
+
 @app.route('/predict', methods=['POST'])
 def predict():
-    data = request.json
-    model_choice = data.get("model", "random_forest")
-    
-    input_features = np.array(data["features"]).reshape(1, -1)
-    scaler = joblib.load("scaler.pkl")
-    input_features = scaler.transform(input_features)
-    
-    if model_choice == "decision_tree":
-        model = joblib.load("decision_tree.pkl")
-    elif model_choice == "logistic_regression":
-        model = joblib.load("logistic_regression.pkl")
-    elif model_choice == "svm":
-        model = joblib.load("svm_model.pkl")
-    else:
-        model = joblib.load("random_forest.pkl")
-    
-    prediction = model.predict(input_features)
-    return jsonify({"prediction": int(prediction[0])})
+    try:
+        data = request.json
+        model_choice = data.get("model", "random_forest")
+        input_features = np.array(data["features"]).reshape(1, -1)
+        
+        scaler = joblib.load("scaler.pkl")
+        input_features = scaler.transform(input_features)
+        
+        if model_choice == "decision_tree":
+            model = joblib.load("decision_tree.pkl")
+        elif model_choice == "logistic_regression":
+            model = joblib.load("logistic_regression.pkl")
+        elif model_choice == "svm":
+            model = joblib.load("svm_model.pkl")
+        else:
+            model = joblib.load("random_forest.pkl")
+        
+        prediction = model.predict(input_features)
+        return jsonify({"prediction": int(prediction[0])})
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        return jsonify({"error": "Invalid input data or server issue."}), 400
 
 if __name__ == '__main__':
     app.run(debug=True)
